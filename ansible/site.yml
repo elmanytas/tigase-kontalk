@@ -1,4 +1,6 @@
 # Kontalk Services
+# From Vagrantfile
 - hosts: tigase
   roles:
   - java8
+  - mysql

@@ -1,3 +1,4 @@
+# Translation from vagrant/packages/java8.sh
 # Thanks: https://gist.github.com/owainlewis/6069582
 - name: ensure required packages are installed for Java 8
   apt: name={{ item }} state=latest update_cache=yes
