@@ -1,0 +1,4 @@
+# Kontalk Services
+- hosts: tigase
+  roles:
+  - java8

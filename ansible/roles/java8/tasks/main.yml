@@ -1,0 +1,31 @@
+# Thanks: https://gist.github.com/owainlewis/6069582
+- name: ensure required packages are installed for Java 8
+  apt: name={{ item }} state=latest update_cache=yes
+  with_items:
+    - python-software-properties
+
+- name: Add Java repository to sources
+  apt_repository: repo='deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main' state=present update_cache=yes
+#  when: ansible_distribution == "Debian" and ansible_distribution_version | search("^8")
+
+- name: Add Java sources repository to sources
+  apt_repository: repo='deb-src http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main' state=present update_cache=yes
+#  when: ansible_distribution == "Debian" and ansible_distribution_version | search("^8")
+
+- name: Add key
+  apt_key: keyserver=keyserver.ubuntu.com id=EEA14886
+
+- name: Ensure sudo is installed
+  apt: name=sudo state=present
+
+- name: Autoaccept license for Java
+  action: shell echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | sudo /usr/bin/debconf-set-selections
+
+- name: Update APT package cache
+  action: apt update_cache=yes
+
+- name: Install Java 8
+  action: apt pkg=oracle-java8-installer state=latest install_recommends=yes
+
+- name: Set Java 8 Env
+  action: apt pkg=oracle-java8-set-default state=latest install_recommends=yes
