@@ -86,8 +86,9 @@
 
 # create GPG key if needed
 - name: Check exist GPG configuration
-  stat: path=/root/.gnupg/private-keys-v1.d
+  stat: path=/root/.gnupg/gpg-gen-key.conf
   register: gnupg
+#gpg2 --list-keys | grep "kontalk@kontalk.es" | wc -l
 
 - name: Key creation script
   template: src=gpg-gen-key.conf.j2 dest=/root/.gnupg/gpg-gen-key.conf
