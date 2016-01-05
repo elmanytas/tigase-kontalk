@@ -1,2 +1,6 @@
 [tigase]
 localhost ansible_connection=local
+
+[tigase:vars]
+branch=production
+kontalk_dbpass=kontalk

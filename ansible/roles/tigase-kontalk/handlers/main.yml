@@ -1,0 +1,12 @@
+- name: populate database
+  shell: |
+    cd tigase-server &&
+    scripts/db-create-mysql.sh -y kontalk {{ kontalk_dbpass }} kontalk >/dev/null || exit 0
+    cd ..
+
+    # create kontalk database objects
+    for SCRIPT in tigase-extension/data/*.sql;
+    do
+        mysql -ukontalk -p{{ kontalk_dbpass }} kontalk < ${SCRIPT}
+    done
+

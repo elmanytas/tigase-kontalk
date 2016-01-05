@@ -1,0 +1,98 @@
+# Translation from vagrant/packages/tigase-kontalk.sh
+- name: Install system dependencies
+  apt: name={{ item }} state=present
+  with_items:
+  - gnupg2
+  - libgpgme11-dev
+  - libkyotocabinet16
+  - libkyotocabinet-dev
+  - gcc
+  - g++
+  - maven
+  - git
+  - make
+
+- name: Check kyotocabinet installation
+  stat: path=/usr/lib/libjkyotocabinet.so
+  register: kyotocabinet
+
+- name: Install kyotocabinet
+  shell: |
+    wget -q http://fallabs.com/kyotocabinet/javapkg/kyotocabinet-java-1.24.tar.gz >/dev/null &&
+    tar -xzf kyotocabinet-java-1.24.tar.gz &&
+    cd kyotocabinet-java-1.24 &&
+    ./configure --prefix=/usr >/dev/null &&
+    make >/dev/null &&
+    sudo make install >/dev/null || exit 1
+    cd .. &&
+    rm -fR kyotocabinet-java-1.24 kyotocabinet-java-1.24.tar.gz
+  when: kyotocabinet.stat.exists == False
+
+- name: Check gnupg for java installation
+  stat: path=/root/.m2/repository/org/gnupg/gnupg-for-java/0.2-pre-SNAPSHOT/gnupg-for-java-0.2-pre-SNAPSHOT.jar
+  register: gnupg_for_java
+
+- name: Install gnupg for java
+  shell: |
+    git clone -b "{{ branch }}" "https://github.com/kontalk/gnupg-for-java.git" &&
+    cd gnupg-for-java &&
+    mvn -q install || exit 1
+    cd .. &&
+    rm -fR gnupg-for-java
+  when: gnupg_for_java.stat.exists == False
+
+- name: Check tigase kontalk installation
+  stat: path=/root/tigase-kontalk/ansible/tigase-kontalk/jars/tigase-server-7.1.0-SNAPSHOT.jar
+  register: tigase_kontalk
+
+- name: Install tigase kontalk
+  shell: |
+    git clone -b "{{ branch }}" "https://github.com/kontalk/tigase-server" &&
+    git clone -b "{{ branch }}" "https://github.com/kontalk/tigase-extension" &&
+    git clone "https://github.com/kontalk/tigase-kontalk" &&
+    cd tigase-kontalk &&
+    mvn -q install || exit 1
+    ln -sf /usr/lib/libjkyotocabinet.so jars/libjkyotocabinet.so
+    cd ..
+  when: tigase_kontalk.stat.exists == False
+
+# vagrant/packages/kontalk-database.sh
+- name: Install python-mysqldb
+  apt: name=python-mysqldb state=present
+
+- name: Create database
+  mysql_db: name=kontalk state=present encoding=utf8mb4 login_user=root login_password=root
+  notify: populate database
+
+- name: Create database user to localhost
+  mysql_user: name=kontalk host=localhost password={{ kontalk_dbpass }} priv=kontalk.*:ALL,GRANT state=present login_user=root login_password=root
+
+
+# vagrant/packages/kontalk-keys.sh
+# create SSL certificate if needed
+- name: Create directory certificates
+  file: path=/root/tigase-kontalk/ansible/tigase-kontalk/certs state=directory
+
+- name: Check SSL certificate
+  stat: path=/root/tigase-kontalk/ansible/tigase-kontalk/certs/cert+key.pem
+  register: ssl_cert
+
+- name: Create SSL certificate
+  shell: |
+    openssl req -x509 -subj "/C=US/ST=Denial/L=Springfield/O=Dis/CN=$(hostname -f)" -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes >/dev/null &&
+    cat cert.pem key.pem > /root/tigase-kontalk/ansible/tigase-kontalk/certs/cert+key.pem &&
+    rm cert.pem key.pem
+  when: ssl_cert.stat.exists == False
+
+# create GPG key if needed
+- name: Check exist GPG configuration
+  stat: path=/root/.gnupg/private-keys-v1.d
+  register: gnupg
+
+- name: Key creation script
+  template: src=gpg-gen-key.conf.j2 dest=/root/.gnupg/gpg-gen-key.conf
+
+- name: Create GPG key pair (take a coffee)
+  shell: |
+    gpg2 --batch --gen-key < /root/.gnupg/gpg-gen-key.conf
+  when: gnupg.stat.exists == False

@@ -1,0 +1,8 @@
+# Translation from vagrant/bootstrap.sh
+- name: Install rng-tools
+  apt: name=rng-tools state=latest update_cache=yes
+
+- name: Set HRNGDEVICE to /dev/urandom
+  lineinfile: dest=/etc/default/rng-tools line="HRNGDEVICE=/dev/urandom" owner=root group=root mode=0644
+  notify: restart rng-tools
+
