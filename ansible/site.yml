@@ -2,6 +2,7 @@
 # From Vagrantfile
 - hosts: tigase
   roles:
+  - system
   - java8
   - mysql
   - rng

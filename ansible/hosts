@@ -1,6 +1,9 @@
 [tigase]
-localhost ansible_connection=local
+localhost ansible_become=root ansible_connection=local
 
 [tigase:vars]
 branch=production
-kontalk_dbpass=kontalk
+mysql_root_password=kontalk
+mysql_user_name=kontalk
+mysql_user_password=kontalk
+timezone=Europe/Rome

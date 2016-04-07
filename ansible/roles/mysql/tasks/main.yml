@@ -1,8 +1,8 @@
-# Translation from vagrant/packages/mysql.sh
-- name: Set root mysql password to root
+# Translation from vagrant/setup/mysql.sh
+- name: Set root mysql password
   shell: |
-    echo mysql-server mysql-server/root_password password root | sudo /usr/bin/debconf-set-selections
-    echo mysql-server mysql-server/root_password_again password root | sudo /usr/bin/debconf-set-selections
+    echo mysql-server mysql-server/root_password password {{ mysql_root_password }} | sudo /usr/bin/debconf-set-selections
+    echo mysql-server mysql-server/root_password_again password {{ mysql_root_password }} | sudo /usr/bin/debconf-set-selections
 
 - name: Install mysql-server
   apt: name=mysql-server state=latest update_cache=yes

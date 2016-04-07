@@ -1,4 +1,4 @@
-# Translation from vagrant/packages/tigase-kontalk.sh
+# Translation from vagrant/setup/tigase-kontalk.sh
 - name: Install system dependencies
   apt: name={{ item }} state=present
   with_items:
@@ -23,23 +23,23 @@
     cd kyotocabinet-java-1.24 &&
     ./configure --prefix=/usr >/dev/null &&
     make >/dev/null &&
-    sudo make install >/dev/null || exit 1
+    make install >/dev/null || exit 1
     cd .. &&
     rm -fR kyotocabinet-java-1.24 kyotocabinet-java-1.24.tar.gz
   when: kyotocabinet.stat.exists == False
 
-- name: Check gnupg for java installation
-  stat: path=/root/.m2/repository/org/gnupg/gnupg-for-java/0.2-pre-SNAPSHOT/gnupg-for-java-0.2-pre-SNAPSHOT.jar
-  register: gnupg_for_java
-
-- name: Install gnupg for java
-  shell: |
-    git clone -b "{{ branch }}" "https://github.com/kontalk/gnupg-for-java.git" &&
-    cd gnupg-for-java &&
-    mvn -q install || exit 1
-    cd .. &&
-    rm -fR gnupg-for-java
-  when: gnupg_for_java.stat.exists == False
+#- name: Check gnupg for java installation
+#  stat: path=/root/.m2/repository/org/gnupg/gnupg-for-java/0.2-pre-SNAPSHOT/gnupg-for-java-0.2-pre-SNAPSHOT.jar
+#  register: gnupg_for_java
+#
+#- name: Install gnupg for java
+#  shell: |
+#    git clone -b "{{ branch }}" "https://github.com/kontalk/gnupg-for-java.git" &&
+#    cd gnupg-for-java &&
+#    mvn -q install || exit 1
+#    cd .. &&
+#    rm -fR gnupg-for-java
+#  when: gnupg_for_java.stat.exists == False
 
 - name: Check tigase kontalk installation
   stat: path=/root/tigase-kontalk/ansible/tigase-kontalk/jars/tigase-server-7.1.0-SNAPSHOT.jar
@@ -54,21 +54,35 @@
     mvn -q install || exit 1
     ln -sf /usr/lib/libjkyotocabinet.so jars/libjkyotocabinet.so
     cd ..
+    # From setup/kontalk-database.sh line 16
+    cd tigase-server &&
+    rm -f jars/*.jar &&
+    cp ../tigase-kontalk/jars/*.jar jars/
   when: tigase_kontalk.stat.exists == False
 
-# vagrant/packages/kontalk-database.sh
+
+# vagrant/setup/kontalk-database.sh
 - name: Install python-mysqldb
   apt: name=python-mysqldb state=present
 
 - name: Create database
-  mysql_db: name=kontalk state=present encoding=utf8mb4 login_user=root login_password=root
+  mysql_db: name=kontalk state=present encoding=utf8mb4 login_user=root login_password={{ mysql_root_password }}
   notify: populate database
 
-- name: Create database user to localhost
-  mysql_user: name=kontalk host=localhost password={{ kontalk_dbpass }} priv=kontalk.*:ALL,GRANT state=present login_user=root login_password=root
+- name: Allow database full permissions to kontalk database
+  mysql_user: name={{ mysql_user_name }} host=localhost password={{ mysql_user_password }} priv=kontalk.*:ALL,GRANT state=present login_user=root login_password={{ mysql_root_password }}
+
+#- name: Allow database select to mysql.proc table
+#  mysql_user: name={{ mysql_user_name }} host=localhost password={{ mysql_user_password }} priv=mysql.proc:SELECT,GRANT state=present login_user=root login_password={{ mysql_root_password }}
+#
+#- name: Allow database insert to mysql.proc table
+#  mysql_user: name={{ mysql_user_name }} host=localhost password={{ mysql_user_password }} priv=mysql.proc:INSERT,GRANT state=present login_user=root login_password={{ mysql_root_password }}
+#
+#- name: Allow database update to mysql.proc table
+#  mysql_user: name={{ mysql_user_name }} host=localhost password={{ mysql_user_password }} priv=mysql.proc:UPDATE,GRANT state=present login_user=root login_password={{ mysql_root_password }}
 
 
-# vagrant/packages/kontalk-keys.sh
+# vagrant/setup/kontalk-keys.sh
 # create SSL certificate if needed
 - name: Create directory certificates
   file: path=/root/tigase-kontalk/ansible/tigase-kontalk/certs state=directory
@@ -97,3 +111,33 @@
   shell: |
     gpg2 --batch --gen-key < /root/.gnupg/gpg-gen-key.conf
   when: gnupg.stat.exists == False
+
+
+# vagrant/setup/kontalk-config.sh
+- name: Check GPG fingerprint exists
+  shell: |
+    gpg2 --with-colons --with-fingerprint --list-secret-keys | grep fpr | awk '{print $10}' FS=: | wc -l
+  register: fingerprint_exists
+  ignore_errors: True
+  failed_when: "'0' in fingerprint_exists.stdout"
+
+- name: Configure fingerprint in database and config files
+  shell: |
+    FINGERPRINT=$(gpg2 --with-colons --with-fingerprint --list-secret-keys | grep fpr | awk '{print $10}' FS=:)
+
+    # export keys to file
+    gpg2 --export ${FINGERPRINT} >${HOME}/tigase-kontalk/server-public.key
+    gpg2 --export-secret-key ${FINGERPRINT} >${HOME}/tigase-kontalk/server-private.key
+
+    # fill the servers table
+    echo "REPLACE INTO servers (fingerprint, host, enabled) VALUES('${FINGERPRINT}', '$(hostname -f)', 1);" |mysql -u{{ mysql_user_name }} -p{{ mysql_user_password }}
+
+    # create configuration
+    sed \
+     -e "s/@FINGERPRINT@/${FINGERPRINT}/" \
+     -e "s/@HOSTNAME@/$(hostname -f)/" \
+     -e "s/@DBNAME@/${MYSQL_USER_NAME}/" \
+     -e "s/@DBUSER@/${MYSQL_USER_NAME}/" \
+     -e "s/@DBPASS@/${MYSQL_USER_PASSWORD}/" \
+     conf/init.properties.dist >${HOME}/tigase-kontalk/etc/init.properties
+  when: fingerprint_exists|failed
