@@ -21,6 +21,7 @@
     wget -q http://fallabs.com/kyotocabinet/javapkg/kyotocabinet-java-1.24.tar.gz >/dev/null &&
     tar -xzf kyotocabinet-java-1.24.tar.gz &&
     cd kyotocabinet-java-1.24 &&
+    export JAVA_HOME=/usr/lib/jvm/java-8-oracle/ &&
     ./configure --prefix=/usr >/dev/null &&
     make >/dev/null &&
     make install >/dev/null || exit 1
@@ -104,6 +105,9 @@
   register: gnupg
 #gpg2 --list-keys | grep "kontalk@kontalk.es" | wc -l
 
+- name: Create gnupg root configuration directory
+  file: path=/root/.gnupg state=directory
+
 - name: Key creation script
   template: src=gpg-gen-key.conf.j2 dest=/root/.gnupg/gpg-gen-key.conf
 
@@ -126,8 +130,8 @@
     FINGERPRINT=$(gpg2 --with-colons --with-fingerprint --list-secret-keys | grep fpr | awk '{print $10}' FS=:)
 
     # export keys to file
-    gpg2 --export ${FINGERPRINT} >${HOME}/tigase-kontalk/server-public.key
-    gpg2 --export-secret-key ${FINGERPRINT} >${HOME}/tigase-kontalk/server-private.key
+    gpg2 --export ${FINGERPRINT} >/root/tigase-kontalk/server-public.key
+    gpg2 --export-secret-key ${FINGERPRINT} >/root/tigase-kontalk/server-private.key
 
     # fill the servers table
     echo "REPLACE INTO servers (fingerprint, host, enabled) VALUES('${FINGERPRINT}', '$(hostname -f)', 1);" |mysql -u{{ mysql_user_name }} -p{{ mysql_user_password }}
@@ -136,8 +140,8 @@
     sed \
      -e "s/@FINGERPRINT@/${FINGERPRINT}/" \
      -e "s/@HOSTNAME@/$(hostname -f)/" \
-     -e "s/@DBNAME@/${MYSQL_USER_NAME}/" \
-     -e "s/@DBUSER@/${MYSQL_USER_NAME}/" \
-     -e "s/@DBPASS@/${MYSQL_USER_PASSWORD}/" \
-     conf/init.properties.dist >${HOME}/tigase-kontalk/etc/init.properties
+     -e "s/@DBNAME@/{{ mysql_user_name }}/" \
+     -e "s/@DBUSER@/{{ mysql_user_name }}/" \
+     -e "s/@DBPASS@/{{ mysql_user_password }}/" \
+     conf/init.properties.dist >/root/tigase-kontalk/etc/init.properties
   when: fingerprint_exists|failed
